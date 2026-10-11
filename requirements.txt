@@ -1,0 +1,12 @@
+langchain 
+langchain-core
+langchain-groq 
+langgraph 
+yfinance 
+feedparser 
+requests 
+python-dotenv
+tavily-python 
+pydantic==2.10.6
+streamlit
+groq<1.0.0
