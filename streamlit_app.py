@@ -194,6 +194,14 @@ if q:
         with st.spinner("Fetching live data..."):
             try:
                 out = graph.invoke({"question": q, "history": history, "retries": 0})
+                
+                ## TEMPORARY:
+                if os.getenv("DEBUG") == "1":
+                    st.write("Plan:", out["plan"].model_dump())
+                    st.write("Fetched context:", out.get("context"))
+                    st.write("Sources:", out.get("sources"))
+                    st.write("Cited sources:", out.get("cited"))
+                
                 reply = {"role": "assistant", "content": out["answer"], "data": out.get("context", ""),
                          "sources": out.get("cited", []), "links": out.get("links", [])}
             except RateLimitError:

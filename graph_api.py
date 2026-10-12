@@ -198,7 +198,7 @@ class S(TypedDict, total=False):
 
 
 # ======================================================================= Node 1: plan
-def plan_node(s: S):
+'''def plan_node(s: S):
     msgs = [("system", f"Today is {today()}.\n" + PLAN_SYS + JSON_RULE), *s["history"][-2:], ("user", s["question"])]
     for _ in range(2):
         try:
@@ -207,7 +207,43 @@ def plan_node(s: S):
         except Exception as e:
             if DEBUG:
                 print("PLANNER ERROR:", repr(e)[:300])
-    return {"plan": Plan(news_queries=[s["question"]])}
+    return {"plan": Plan(news_queries=[s["question"]])}'''
+    
+
+def plan_node(s: S):
+    q = s["question"].strip()
+
+    if re.search(
+        r"\b(ipo|ipos|initial public offering)\b",
+        q,
+        re.I,
+    ):
+        return {
+            "plan": Plan(
+                news_queries=[
+                    "India IPO opening date open this week upcoming IPO",
+                    "NSE BSE upcoming IPO issues opening closing dates",
+                ],
+                news_source="any",
+            )
+        }
+
+    msgs = [
+        ("system", f"Today is {today()}.\n" + PLAN_SYS + JSON_RULE),
+        *s["history"][-2:],
+        ("user", q),
+    ]
+
+    for _ in range(2):
+        try:
+            resp = with_wait(lambda: planner_llm.invoke(msgs))
+            return {"plan": parse_plan(resp.content)}
+        except Exception as e:
+            if DEBUG:
+                print("PLANNER ERROR:", repr(e)[:300])
+
+    return {"plan": Plan(news_queries=[q])}
+    
 
 
 # ======================================================================= Node 2: fetch (no LLM)

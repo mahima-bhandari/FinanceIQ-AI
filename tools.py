@@ -9,6 +9,7 @@ import feedparser
 import requests
 import yfinance as yf
 from langchain_core.tools import tool
+import time
 
 logging.getLogger("yfinance").setLevel(logging.CRITICAL)  # silence 404 spam
 
@@ -131,21 +132,67 @@ SOURCES = {
 }
 
 
+
 def news_items(query: str, source: str = "any", n: int = 6) -> list:
-    """Recent headlines as dicts: title, source, date, url (publisher link via Google News)."""
+    """Fetch recent headlines with explicit timeouts and retries."""
     key = re.sub(r"[^a-z]", "", (source or "").lower())
-    q = query + (f" site:{SOURCES[key]}" if key in SOURCES else "") + " when:2d"
-    url = f"https://news.google.com/rss/search?q={quote_plus(q)}&hl=en-IN&gl=IN&ceid=IN:en"
-    items = []
-    for e in feedparser.parse(url).entries[:n]:
-        title, _, src = e.title.rpartition(" - ")
-        items.append({
-            "title": title or e.title,
-            "source": src or "unknown",
-            "date": e.get("published", "")[:16],
-            "url": e.get("link"),
-        })
-    return items
+
+    is_ipo = bool(re.search(
+        r"\b(ipo|ipos|initial public offering|listing|allotment|gmp)\b",
+        query,
+        re.I,
+    ))
+
+    # IPO announcements may have been published earlier in the week.
+    window = "when:7d" if is_ipo else "when:2d"
+    q = query + (
+        f" site:{SOURCES[key]}" if key in SOURCES else ""
+    ) + f" {window}"
+
+    url = (
+        "https://news.google.com/rss/search?"
+        f"q={quote_plus(q)}&hl=en-IN&gl=IN&ceid=IN:en"
+    )
+
+    for attempt in range(3):
+        try:
+            response = requests.get(
+                url,
+                timeout=(5, 15),
+                headers={"User-Agent": "Mozilla/5.0"},
+            )
+            response.raise_for_status()
+
+            feed = feedparser.parse(response.content)
+            items = []
+
+            for e in feed.entries[:n]:
+                title, _, src = e.title.rpartition(" - ")
+                link = e.get("link")
+
+                if not link:
+                    continue
+
+                items.append({
+                    "title": title or e.title,
+                    "source": src or "Google News",
+                    "date": e.get("published", "")[:16],
+                    "url": link,
+                })
+
+            return items
+
+        except Exception as exc:
+            logging.warning(
+                "News fetch failed (%s), attempt %s/3",
+                type(exc).__name__,
+                attempt + 1,
+            )
+            if attempt < 2:
+                time.sleep(attempt + 1)
+
+    return []
+
 
 
 @tool
